@@ -41,7 +41,39 @@ export type ChatAction =
   | { type: "user-message-sent"; message: ChatMessageItem }
   | { type: "ai-response-received"; message: ChatMessageItem; generation: number }
   | { type: "send-failed"; error: string; generation: number }
-  | { type: "conversation-reset" };
+  | { type: "conversation-reset" }
+  | { type: "conversation-loaded"; messages: ChatMessageItem[] };
+
+/**
+ * Tracks which conversation-switch fetch (if any) is still the most recent
+ * one, so `chat-view.tsx` can drop a stale result once it resolves — the
+ * same kind of staleness check `generation` above gives Send, expressed as a
+ * plain class (not a React ref) so the ordering logic itself is unit-testable
+ * without any DOM/React test infra (Linear TTO-10 review finding: New Chat vs.
+ * conversation-switch race).
+ *
+ * `next()` is called when a switch fetch starts, and returns the id to
+ * compare against later via `isStale`. `invalidate()` is called by anything
+ * that should make any in-flight switch fetch's result stale without itself
+ * starting a tracked switch — currently New Chat, mirroring how it already
+ * bumps `generation` to invalidate a stale Send.
+ */
+export class SwitchRequestGuard {
+  private currentId = 0;
+
+  next(): number {
+    this.currentId += 1;
+    return this.currentId;
+  }
+
+  invalidate(): void {
+    this.currentId += 1;
+  }
+
+  isStale(requestId: number): boolean {
+    return this.currentId !== requestId;
+  }
+}
 
 export function chatReducer(state: ChatState, action: ChatAction): ChatState {
   switch (action.type) {
@@ -83,6 +115,20 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       // state — the previous conversation's rows are untouched in the
       // database (see `src/app/api/conversations/route.ts`).
       return { ...initialChatState, generation: state.generation + 1 };
+    case "conversation-loaded":
+      // Opening a past conversation from the sidebar (Linear TTO-10,
+      // AC-06/SC-07): replaces the current messages with the selected
+      // conversation's full history — it does not append to whatever was
+      // showing before. Bumps `generation` exactly like `conversation-reset`
+      // does, so a Send (or another switch) still in flight for the
+      // conversation being switched away from can't have its late-arriving
+      // result corrupt this view (same race New Chat's reset already guards
+      // against).
+      return {
+        ...initialChatState,
+        messages: action.messages,
+        generation: state.generation + 1,
+      };
     default:
       return state;
   }

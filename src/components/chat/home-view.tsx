@@ -63,16 +63,26 @@ export function HomeView({ createConversation }: HomeViewProps) {
     setConversations((prev) => addConversation(prev, conversation));
   }
 
+  // Opening a past conversation (Linear TTO-10, AC-06/SC-07): highlight it in
+  // the sidebar immediately, and hand its id down to `ChatView` as
+  // `selectedConversationId` — `ChatView` owns actually fetching and loading
+  // its messages (see that component's doc comment for why).
+  function handleSelectConversation(id: string) {
+    setActiveConversationId(id);
+  }
+
   return (
     <>
       <ConversationSidebar
         conversations={conversations}
         activeConversationId={activeConversationId}
+        onSelectConversation={handleSelectConversation}
       />
       <div className="flex flex-1 flex-col items-center p-4">
         <ChatView
           createConversation={createConversation}
           onConversationCreated={handleConversationCreated}
+          selectedConversationId={activeConversationId}
         />
       </div>
     </>
