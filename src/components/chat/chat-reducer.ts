@@ -21,18 +21,26 @@ export interface ChatState {
   messages: ChatMessageItem[];
   status: ChatStatus;
   error: string | null;
+  // Bumped on every `conversation-reset`. `ai-response-received` and
+  // `send-failed` carry the generation their Send was issued under (captured
+  // by `chat-view.tsx` before its `fetch`); if it no longer matches, a New
+  // Chat reset happened while that Send was in flight, so the result is
+  // stale and must be dropped instead of corrupting the new conversation's
+  // view (Linear TTO-8 review finding: race between Send and New Chat).
+  generation: number;
 }
 
 export const initialChatState: ChatState = {
   messages: [],
   status: "idle",
   error: null,
+  generation: 0,
 };
 
 export type ChatAction =
   | { type: "user-message-sent"; message: ChatMessageItem }
-  | { type: "ai-response-received"; message: ChatMessageItem }
-  | { type: "send-failed"; error: string }
+  | { type: "ai-response-received"; message: ChatMessageItem; generation: number }
+  | { type: "send-failed"; error: string; generation: number }
   | { type: "conversation-reset" };
 
 export function chatReducer(state: ChatState, action: ChatAction): ChatState {
@@ -41,17 +49,27 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       // SC-01: the user's message is appended immediately, before any AI
       // response arrives.
       return {
+        ...state,
         messages: [...state.messages, action.message],
         status: "sending",
         error: null,
       };
     case "ai-response-received":
+      if (action.generation !== state.generation) {
+        // Stale: issued for a conversation that a New Chat has since reset.
+        // Drop it silently rather than showing a reply for the wrong chat.
+        return state;
+      }
       return {
+        ...state,
         messages: [...state.messages, action.message],
         status: "idle",
         error: null,
       };
     case "send-failed":
+      if (action.generation !== state.generation) {
+        return state;
+      }
       // Prior messages (including the just-sent user message) are left
       // untouched; no fabricated AI message is appended.
       return {
@@ -64,7 +82,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       // empty, active conversation. This only resets client-side view
       // state — the previous conversation's rows are untouched in the
       // database (see `src/app/api/conversations/route.ts`).
-      return initialChatState;
+      return { ...initialChatState, generation: state.generation + 1 };
     default:
       return state;
   }

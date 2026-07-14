@@ -35,16 +35,28 @@ function createMessageId(): string {
 export function ChatView({ createConversation }: ChatViewProps) {
   const [state, dispatch] = useReducer(chatReducer, initialChatState);
   const [input, setInput] = useState("");
+  const [isCreatingChat, setIsCreatingChat] = useState(false);
   const conversationIdRef = useRef<string | null>(null);
+  // Mirrors `state.generation` for synchronous reads inside async callbacks
+  // (see `chat-reducer.ts`) — incremented in lockstep with every
+  // `conversation-reset` dispatch below.
+  const generationRef = useRef(0);
 
   const isSending = state.status === "sending";
+  // Neither a Send nor a New Chat may start while the other is in flight —
+  // this closes the race where a Send resolves after a New Chat has already
+  // reset the view (Linear TTO-8 review finding), and also prevents a
+  // rapid double-click on New Chat from creating an extra conversation row.
+  const isBusy = isSending || isCreatingChat;
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const content = input.trim();
-    if (!content || isSending) {
+    if (!content || isBusy) {
       return;
     }
+
+    const generation = generationRef.current;
 
     dispatch({
       type: "user-message-sent",
@@ -80,20 +92,23 @@ export function ChatView({ createConversation }: ChatViewProps) {
           role: "assistant",
           content: data.reply,
         },
+        generation,
       });
     } catch {
       dispatch({
         type: "send-failed",
         error: "Something went wrong while getting a response. Please try again.",
+        generation,
       });
     }
   }
 
   async function handleNewChat() {
-    if (isSending) {
+    if (isBusy) {
       return;
     }
 
+    setIsCreatingChat(true);
     try {
       const response = await fetch("/api/conversations", { method: "POST" });
       if (!response.ok) {
@@ -103,6 +118,7 @@ export function ChatView({ createConversation }: ChatViewProps) {
       const conversation = (await response.json()) as { id: string };
       conversationIdRef.current = conversation.id;
       setInput("");
+      generationRef.current += 1;
       dispatch({ type: "conversation-reset" });
     } catch {
       // The failed New Chat attempt leaves the current conversation and its
@@ -110,14 +126,23 @@ export function ChatView({ createConversation }: ChatViewProps) {
       dispatch({
         type: "send-failed",
         error: "Could not start a new chat. Please try again.",
+        generation: generationRef.current,
       });
+    } finally {
+      setIsCreatingChat(false);
     }
   }
 
   return (
     <div className="flex w-full max-w-2xl flex-1 flex-col gap-4 p-4">
       <div className="flex justify-end">
-        <Button type="button" variant="outline" size="sm" onClick={handleNewChat}>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={handleNewChat}
+          disabled={isBusy}
+        >
           New Chat
         </Button>
       </div>
@@ -151,10 +176,10 @@ export function ChatView({ createConversation }: ChatViewProps) {
           value={input}
           onChange={(event) => setInput(event.target.value)}
           placeholder="Type a message…"
-          disabled={isSending}
+          disabled={isBusy}
           aria-label="Message"
         />
-        <Button type="submit" disabled={isSending || input.trim().length === 0}>
+        <Button type="submit" disabled={isBusy || input.trim().length === 0}>
           Send
         </Button>
       </form>
