@@ -1,6 +1,6 @@
 "use client";
 
-import { useReducer, useRef, useState, type FormEvent } from "react";
+import { useEffect, useReducer, useRef, useState, type FormEvent } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,6 +10,7 @@ import {
   chatReducer,
   initialChatState,
   type ChatMessageItem,
+  type ChatRole,
 } from "./chat-reducer";
 
 /**
@@ -27,10 +28,28 @@ import {
  * view starts a new conversation — either the lazy bootstrap above, or an
  * explicit New Chat — so a parent component can keep the sidebar's list and
  * active-conversation highlight in sync, without a second `GET` round trip.
+ *
+ * `selectedConversationId` (Linear TTO-10, AC-06/SC-07) is the id the parent
+ * wants this view to show — set when the user clicks a past conversation in
+ * the sidebar. When it names a conversation this view isn't already showing,
+ * an effect loads it from `GET /api/conversations/[id]` and replaces the
+ * current messages with its full history (see `chat-reducer.ts`'s
+ * `conversation-loaded` action for why this is a replace, not an append, and
+ * why it bumps `generation` the same way `conversation-reset` does). Because
+ * `conversationIdRef` below is set eagerly by the lazy-bootstrap and New Chat
+ * paths *before* the parent's prop can reflect it, feeding
+ * `activeConversationId` back in as `selectedConversationId` does not
+ * re-trigger a load for a conversation this view itself just created.
  */
 export interface ChatViewProps {
   createConversation: () => Promise<string>;
   onConversationCreated?: (conversation: SidebarConversation) => void;
+  selectedConversationId?: string | null;
+}
+
+interface FetchedConversation {
+  id: string;
+  messages: { id: string; role: ChatRole; content: string }[];
 }
 
 function createMessageId(): string {
@@ -39,15 +58,24 @@ function createMessageId(): string {
     : Math.random().toString(36).slice(2);
 }
 
-export function ChatView({ createConversation, onConversationCreated }: ChatViewProps) {
+export function ChatView({
+  createConversation,
+  onConversationCreated,
+  selectedConversationId,
+}: ChatViewProps) {
   const [state, dispatch] = useReducer(chatReducer, initialChatState);
   const [input, setInput] = useState("");
   const [isCreatingChat, setIsCreatingChat] = useState(false);
   const conversationIdRef = useRef<string | null>(null);
   // Mirrors `state.generation` for synchronous reads inside async callbacks
   // (see `chat-reducer.ts`) — incremented in lockstep with every
-  // `conversation-reset` dispatch below.
+  // `conversation-reset`/`conversation-loaded` dispatch below.
   const generationRef = useRef(0);
+  // Only the most recently requested conversation-switch may apply its
+  // result — guards against two rapid sidebar clicks resolving out of order
+  // (independent of the `generation` guard above, which instead guards
+  // against a Send/New-Chat racing a switch).
+  const latestSwitchRequestIdRef = useRef(0);
 
   const isSending = state.status === "sending";
   // Neither a Send nor a New Chat may start while the other is in flight —
@@ -55,6 +83,55 @@ export function ChatView({ createConversation, onConversationCreated }: ChatView
   // reset the view (Linear TTO-8 review finding), and also prevents a
   // rapid double-click on New Chat from creating an extra conversation row.
   const isBusy = isSending || isCreatingChat;
+
+  useEffect(() => {
+    const id = selectedConversationId;
+    if (!id || id === conversationIdRef.current) {
+      // Nothing to load: no selection yet, or this view already shows it
+      // (including the case where this view itself just created/reset to
+      // this id — see the prop doc comment above).
+      return;
+    }
+
+    latestSwitchRequestIdRef.current += 1;
+    const requestId = latestSwitchRequestIdRef.current;
+
+    fetch(`/api/conversations/${id}`)
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error("Failed to load the conversation");
+        }
+        return response.json() as Promise<FetchedConversation>;
+      })
+      .then((conversation) => {
+        if (latestSwitchRequestIdRef.current !== requestId) {
+          // A newer selection superseded this one before it resolved.
+          return;
+        }
+        conversationIdRef.current = conversation.id;
+        generationRef.current += 1;
+        setInput("");
+        dispatch({
+          type: "conversation-loaded",
+          messages: conversation.messages.map((message) => ({
+            id: message.id,
+            role: message.role,
+            content: message.content,
+          })),
+        });
+      })
+      .catch(() => {
+        if (latestSwitchRequestIdRef.current !== requestId) {
+          return;
+        }
+        dispatch({
+          type: "send-failed",
+          error: "Could not load that conversation. Please try again.",
+          generation: generationRef.current,
+        });
+      });
+    // Only re-run when the parent asks for a different conversation.
+  }, [selectedConversationId]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

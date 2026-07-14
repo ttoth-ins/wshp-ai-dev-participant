@@ -171,4 +171,57 @@ describe("chatReducer", () => {
     expect(afterAi.messages).toEqual([userMessage, aiMessage]);
     expect(afterAi.status).toBe("idle");
   });
+
+  it("replaces the current messages with a loaded conversation's full history, not appending to them (AC-06/SC-07)", () => {
+    const afterUser = chatReducer(initialChatState, {
+      type: "user-message-sent",
+      message: userMessage,
+    });
+
+    const loadedMessages: ChatMessageItem[] = [
+      { id: "10", role: "user", content: "First question" },
+      { id: "11", role: "assistant", content: "First answer" },
+      { id: "12", role: "user", content: "Second question" },
+    ];
+    const afterLoad = chatReducer(afterUser, {
+      type: "conversation-loaded",
+      messages: loadedMessages,
+    });
+
+    expect(afterLoad.messages).toEqual(loadedMessages);
+    expect(afterLoad.status).toBe("idle");
+    expect(afterLoad.error).toBeNull();
+    expect(afterLoad.generation).toBe(afterUser.generation + 1);
+  });
+
+  it(
+    "drops a stale AI response that resolves after the conversation was " +
+      "switched, instead of showing a reply in the wrong (newly opened) " +
+      "conversation (Linear TTO-10: same race New Chat's reset already guards)",
+    () => {
+      const afterUser = chatReducer(initialChatState, {
+        type: "user-message-sent",
+        message: userMessage,
+      });
+      expect(afterUser.generation).toBe(0);
+
+      const loadedMessages: ChatMessageItem[] = [
+        { id: "20", role: "user", content: "Older question" },
+      ];
+      const afterLoad = chatReducer(afterUser, {
+        type: "conversation-loaded",
+        messages: loadedMessages,
+      });
+      expect(afterLoad.generation).toBe(1);
+
+      const afterStaleAi = chatReducer(afterLoad, {
+        type: "ai-response-received",
+        message: aiMessage,
+        generation: 0,
+      });
+
+      expect(afterStaleAi).toEqual(afterLoad);
+      expect(afterStaleAi.messages).toEqual(loadedMessages);
+    },
+  );
 });

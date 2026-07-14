@@ -41,7 +41,8 @@ export type ChatAction =
   | { type: "user-message-sent"; message: ChatMessageItem }
   | { type: "ai-response-received"; message: ChatMessageItem; generation: number }
   | { type: "send-failed"; error: string; generation: number }
-  | { type: "conversation-reset" };
+  | { type: "conversation-reset" }
+  | { type: "conversation-loaded"; messages: ChatMessageItem[] };
 
 export function chatReducer(state: ChatState, action: ChatAction): ChatState {
   switch (action.type) {
@@ -83,6 +84,20 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       // state — the previous conversation's rows are untouched in the
       // database (see `src/app/api/conversations/route.ts`).
       return { ...initialChatState, generation: state.generation + 1 };
+    case "conversation-loaded":
+      // Opening a past conversation from the sidebar (Linear TTO-10,
+      // AC-06/SC-07): replaces the current messages with the selected
+      // conversation's full history — it does not append to whatever was
+      // showing before. Bumps `generation` exactly like `conversation-reset`
+      // does, so a Send (or another switch) still in flight for the
+      // conversation being switched away from can't have its late-arriving
+      // result corrupt this view (same race New Chat's reset already guards
+      // against).
+      return {
+        ...initialChatState,
+        messages: action.messages,
+        generation: state.generation + 1,
+      };
     default:
       return state;
   }
