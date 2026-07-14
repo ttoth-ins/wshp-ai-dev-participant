@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 
-import { createConversation, type Conversation, type QueryExecutor } from "@/lib/db";
+import {
+  createConversation,
+  listConversations,
+  type Conversation,
+  type QueryExecutor,
+} from "@/lib/db";
 
 /**
  * POST /api/conversations (Linear TTO-8, AC-03).
@@ -38,6 +43,41 @@ export async function POST() {
     console.error("Failed to create a new conversation", error);
     return NextResponse.json(
       { error: "Failed to create a new conversation" },
+      { status: 500 },
+    );
+  }
+}
+
+/**
+ * GET /api/conversations (Linear TTO-9, AC-05).
+ *
+ * Lists every conversation, most-recent-first (`listConversations` already
+ * orders by `created_at DESC` — see `src/lib/db.ts`), for the sidebar (SC-06).
+ */
+
+export interface ListConversationsDeps {
+  executor?: QueryExecutor;
+}
+
+/**
+ * Core logic, kept as a plain function (mirrors `createNewConversation`
+ * above) so it can be unit-tested with a fake executor, without a live
+ * network connection to Neon in CI.
+ */
+export async function listAllConversations(
+  deps: ListConversationsDeps = {},
+): Promise<Conversation[]> {
+  return listConversations(deps.executor);
+}
+
+export async function GET() {
+  try {
+    const conversations = await listAllConversations();
+    return NextResponse.json(conversations);
+  } catch (error) {
+    console.error("Failed to list conversations", error);
+    return NextResponse.json(
+      { error: "Failed to list conversations" },
       { status: 500 },
     );
   }

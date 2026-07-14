@@ -4,6 +4,7 @@ import { useReducer, useRef, useState, type FormEvent } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import type { SidebarConversation } from "@/components/sidebar/conversation-list";
 
 import {
   chatReducer,
@@ -21,9 +22,15 @@ import {
  * `POST /api/conversations` endpoint (TTO-8) eagerly and immediately resets
  * this view to a new, empty, active conversation — it does not read or
  * modify any previous conversation's data.
+ *
+ * `onConversationCreated` (Linear TTO-9, AC-05/SC-06) is called whenever this
+ * view starts a new conversation — either the lazy bootstrap above, or an
+ * explicit New Chat — so a parent component can keep the sidebar's list and
+ * active-conversation highlight in sync, without a second `GET` round trip.
  */
 export interface ChatViewProps {
   createConversation: () => Promise<string>;
+  onConversationCreated?: (conversation: SidebarConversation) => void;
 }
 
 function createMessageId(): string {
@@ -32,7 +39,7 @@ function createMessageId(): string {
     : Math.random().toString(36).slice(2);
 }
 
-export function ChatView({ createConversation }: ChatViewProps) {
+export function ChatView({ createConversation, onConversationCreated }: ChatViewProps) {
   const [state, dispatch] = useReducer(chatReducer, initialChatState);
   const [input, setInput] = useState("");
   const [isCreatingChat, setIsCreatingChat] = useState(false);
@@ -69,6 +76,7 @@ export function ChatView({ createConversation }: ChatViewProps) {
       if (!conversationId) {
         conversationId = await createConversation();
         conversationIdRef.current = conversationId;
+        onConversationCreated?.({ id: conversationId, title: "New Chat" });
       }
 
       const response = await fetch(
@@ -115,11 +123,12 @@ export function ChatView({ createConversation }: ChatViewProps) {
         throw new Error("Failed to create a new conversation");
       }
 
-      const conversation = (await response.json()) as { id: string };
+      const conversation = (await response.json()) as SidebarConversation;
       conversationIdRef.current = conversation.id;
       setInput("");
       generationRef.current += 1;
       dispatch({ type: "conversation-reset" });
+      onConversationCreated?.(conversation);
     } catch {
       // The failed New Chat attempt leaves the current conversation and its
       // messages exactly as they were (SC-04) — only an error is shown.
