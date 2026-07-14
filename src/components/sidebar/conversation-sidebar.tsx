@@ -6,10 +6,11 @@ import { isActiveConversation, type SidebarConversation } from "./conversation-l
  * Sidebar listing every conversation, most-recent-first, with the active one
  * visually highlighted (Linear TTO-9, AC-05/SC-06).
  *
- * `onSelectConversation` is a stub hook point for Linear TTO-10 (opening a
- * past conversation) — this component only renders the list and reports
- * which entry was clicked; it does not fetch or render that conversation's
- * message history itself.
+ * `onSelectConversation` (wired up by `home-view.tsx`/`chat-view.tsx`, Linear
+ * TTO-10, AC-06/SC-07) reports which entry was clicked so a past conversation
+ * can be opened — this component only renders the list and reports the
+ * click; it does not fetch or render that conversation's message history
+ * itself.
  */
 export interface ConversationSidebarProps {
   conversations: SidebarConversation[];
