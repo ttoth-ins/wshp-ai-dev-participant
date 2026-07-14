@@ -105,12 +105,19 @@ levezetve — ez a két forrás a hivatalos igazság, nem ez a dokumentum másol
 | 3 | Teszt | `npm run test` | `vitest run` | exit 0, minden teszt zöld | minden változás előtt; új logikához új teszt |
 | 3b | Modul-tesztelhetőség | `npm run test` (az adott modul teszt-fájlja) | az adott modulhoz (feature/issue) tartozik legalább egy automatikus teszt | a modul viselkedése kézi lépés nélkül igazolt | minden új modul lezárása előtt |
 | 4 | Build | `npm run build` | `next build` — éles build, ezt futtatja a Vercel is | exit 0 | PR nyitása / merge előtt kötelező |
-| 5 | Összevont lokális kapu | `npm run typecheck && npm run lint && npm run test && npm run build` | 1–4 együtt | mind exit 0 | task "kész"-nek jelentése előtt |
-| 6 | CI | `.github/workflows/ci.yml` (`npm ci` → 1–4 ugyanabban a sorrendben) | ugyanaz a 4 kapu, tiszta környezetben | `completed success` a PR-on / `main`-en | minden push és pull request |
+| 4b | E2E | `npm run test:e2e` | Playwright, headless Chromium (`playwright.config.ts`) | exit 0, minden E2E-szcenárió zöld | PR nyitása / merge előtt kötelező |
+| 5 | Összevont lokális kapu | `npm run typecheck && npm run lint && npm run test && npm run build && npm run test:e2e` | 1–4b együtt | mind exit 0 | task "kész"-nek jelentése előtt |
+| 6 | CI | `.github/workflows/ci.yml` (`npm ci` → 1–4b ugyanabban a sorrendben, Playwright böngésző-telepítéssel) | ugyanaz az 5 kapu, tiszta környezetben | `completed success` a PR-on / `main`-en | minden push és pull request |
 
-Megjegyzés: a `main` ágon jelenleg **nincs branch protection vagy kötelező
-CI-check bekötve** — a fenti kapuk ma konvenció, nem gépi kényszer. Ez a Modul
-5 (Szabályok és kapuk) tárgya, itt csak rögzítjük a hiányt.
+Megjegyzés: **branch protection élesítve** (döntés + végrehajtás, 2026-07-14).
+A repo emberi döntésre PUBLIC-ra váltott (a klasszikus branch protection és a
+repository rulesets is csak publikus repóra vagy Pro/Team/Enterprise csomagra
+érhető el privát repón), majd a `main`-re bekötve: kötelező `checks` státusz
+(a fenti 6 kapu), PR szükséges a mergehez (0 jóváhagyás elég — egyszemélyes
+repo), `enforce_admins: true` (a repo tulajdonosára is vonatkozik, nincs
+megkerülés), force-push és branch-törlés tiltva. A fenti kapuk a `main`-en
+mostantól gépi kényszer, nem csak konvenció — beleértve azt is, hogy mostantól
+**csak PR-en keresztül kerülhet kód a `main`-be**, közvetlen `git push` nem.
 
 Nem-mechanikus DoD-elemek, amelyeket a gépi kapuk nem mérnek, de a review részei:
 - A változás egy jóváhagyott spec/issue alapján készült (Linear: `issue = spec`).
