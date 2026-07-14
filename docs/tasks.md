@@ -4,16 +4,17 @@
 > check and records the evidence. The human approves scope, findings, and
 > progression.
 
-`STATUS: APPROVED — constitution, spec, and plan all carry a recorded human
-approval (Tóth Tibor, 2026-07-14). Every task below is still not-started and
-every coverage verdict is pending, not covered — approval opens the gate to
-implementation, it does not mean implementation happened.`
+`STATUS: APPROVED (amended) — constitution v1.1, spec, and plan P2 all carry a
+recorded human approval (Tóth Tibor, 2026-07-14), including the D-01
+amendment (persistence: SQLite → Neon Postgres). Every task below is still
+not-started and every coverage verdict is pending, not covered — approval
+opens the gate to implementation, it does not mean implementation happened.`
 
 ## Input versions
 
-- Constitution: v1.0 (APPROVED) — [constitution.md](constitution.md)
+- Constitution: v1.1 (APPROVED, amended) — [constitution.md](constitution.md)
 - Spec: AI-ASSISTANT-MVP v1.0 (APPROVED) — [spec.md](spec.md)
-- Plan: `P1-APPROVED-PLAN` (verdict `APPROVED`) — [plan.md](plan.md)
+- Plan: `P2-APPROVED-PLAN` (verdict `APPROVED`, amends `P1`) — [plan.md](plan.md)
 - Human approval evidence: Tóth Tibor, 2026-07-14, recorded in each
   document's gate section.
 
@@ -27,7 +28,7 @@ spec-package's authoritative cross-reference to it.
 
 | ID | Task/outcome | Exclusive scope | Accountable owner | Depends on/order | AC IDs | Agent-run verification | Evidence location | Status |
 |---|---|---|---|---|---|---|---|---|
-| TASK-01 | SQLite schema + data module: create/list/get conversation, save message | `src/lib/db.ts` + its test | Tóth Tibor | — (first) | AC-04 | `npm run test -- db` | Linear TTO-5 comment | not-started |
+| TASK-01 | Neon Postgres schema + data module: create/list/get conversation, save message | `src/lib/db.ts` + its test | Tóth Tibor | — (first) | AC-04 | `npm run test -- db` | Linear TTO-5 comment | not-started |
 | TASK-02 | Claude client + chat endpoint: save user message, load full history, call Claude, save + return AI response | `src/lib/claude.ts`, `src/app/api/conversations/[id]/messages/route.ts` + tests | Tóth Tibor | after TASK-01 | AC-02 | `npm run test -- messages` | Linear TTO-6 comment | not-started |
 | TASK-03 | Chat UI: message list, input, Send button, loading state | `src/app/page.tsx` + new chat components under `src/components/` | Tóth Tibor | after TASK-02 | AC-01 | `npm run test -- chat` | Linear TTO-7 comment | not-started |
 | TASK-04 | New Chat: `POST /api/conversations` + button, activates the new empty conversation | `src/app/api/conversations/route.ts`, UI button wiring | Tóth Tibor | after TASK-01, TASK-03 | AC-03 | `npm run test -- conversations` | Linear TTO-8 comment | not-started |
@@ -93,8 +94,8 @@ re-verified, and remaining risk has a human owner.
 - [x] Every evidence location is named before work starts.
 - [x] No unresolved decision remains silently invented; D-03 is RESOLVED
       (Claude Sonnet 5) and recorded below, not assumed.
-- [x] Approved constitution, spec, and plan versions are recorded. — v1.0 /
-      v1.0 / P1-APPROVED-PLAN, Tóth Tibor, 2026-07-14.
+- [x] Approved constitution, spec, and plan versions are recorded. — v1.1 /
+      v1.0 / P2-APPROVED-PLAN, Tóth Tibor, 2026-07-14.
 - [x] A human has approved entry into the implementation phase. — Tóth Tibor,
       2026-07-14 (plan approval, see `plan.md`).
 
@@ -102,7 +103,7 @@ re-verified, and remaining risk has a human owner.
 
 | Decision/deviation | Owner | Options/impact or reason | Outcome | Evidence |
 |---|---|---|---|---|
-| D-01 persistence choice | Tóth Tibor | SQLite (`better-sqlite3`) vs. JSON file vs. Neon Postgres | RESOLVED — SQLite chosen | conversation record; [plan.md](plan.md) Risks |
+| D-01 persistence choice | Tóth Tibor | SQLite (`better-sqlite3`) vs. JSON file vs. Neon Postgres | REOPENED 2026-07-14, RE-RESOLVED — **Neon Postgres**, via Vercel Marketplace integration. Reason: the app is now deployed on Vercel (serverless Functions), where a local SQLite file isn't durable storage across invocations/deployments; Neon (`@neondatabase/serverless`) fits that model. Originally SQLite (first resolution, superseded) | conversation record; [plan.md](plan.md) Risks; constitution v1.1 |
 | D-02 auto-title generator | Tóth Tibor | Claude-generated title vs. truncated first message | RESOLVED — Claude generates the title | conversation record; Linear TTO-11 |
 | D-03 Claude model(s) for chat vs. title generation | Tóth Tibor | one model for both vs. a cheaper/faster model for title generation | RESOLVED — Claude Sonnet 5 (`claude-sonnet-5`) for both chat responses and title generation | conversation record; this file |
 | D-04 branch protection on `main` | Tóth Tibor | wanted (yes); blocked on a private repo (GitHub Pro/Team/Enterprise required) — resolved by making the repo public instead of upgrading | RESOLVED — repo is now PUBLIC; branch protection on `main` enabled: required status check `checks`, PR required (0 approvals needed, solo repo), `enforce_admins: true`, no force-push/no deletion | `engineering-standard.md` §6; `plan.md` Risks |
@@ -116,7 +117,8 @@ re-verified, and remaining risk has a human owner.
   local fallback, but do not claim the original check passed.
 - **Plan no longer fits the code:** document evidence and request plan
   re-approval; do not silently expand scope.
-- **`better-sqlite3` native build fails on Windows (this repo's dev
-  environment):** this is a human decision (alternative library, prebuilt
-  binary, or WSL), not something the coding agent resolves by substituting a
-  different persistence approach unannounced.
+- **Neon connectivity/credential failure (`DATABASE_URL` missing, expired, or
+  unreachable):** this is a human decision (re-provision via
+  `vercel env pull`, check the Neon project status), not something the coding
+  agent resolves by silently falling back to a local file or a different
+  persistence approach.

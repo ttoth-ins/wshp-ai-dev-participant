@@ -20,11 +20,13 @@ feltételezésből.
 | UI-komponensek | shadcn/ui | lokális forrás `src/components/ui/`-ban |
 | Lint | ESLint | ^9, `eslint-config-next` 16.2.10 (flat config: `core-web-vitals` + `typescript`) |
 | Teszt | Vitest | ^4.1.10, `environment: "node"` |
+| E2E | Playwright (`@playwright/test`) | headless Chromium, `playwright.config.ts` |
+| Hosting | Vercel | projekt linkelve és deploy-olva (`ttoth/wshp-ai-dev-participant`), Git-integráció bekötve |
+| Adatbázis | Neon Postgres | Vercel Marketplace-integráció, `DATABASE_URL` env-en át (D-01, felülvizsgálva — lásd `constitution.md` v1.1); kliens még nincs implementálva (Linear TTO-5) |
 
-Adatbázis, hitelesítés, hosting-integráció (Neon, Vercel) **nincs bekötve** — az
-`.env.example` szándékosan üres, ezek a nap későbbi blokkjaiban kerülnek be. Ezt a
-standardot majd akkor bővítjük, amikor a réteg ténylegesen megjelenik a repóban —
-nem korábban.
+Hitelesítés (auth) továbbra sincs bekötve és nem is lesz — szándékos non-goal
+(lásd `constitution.md`). Ezt a standardot akkor bővítjük tovább, amikor egy
+réteg ténylegesen megjelenik a repóban — nem korábban.
 
 ## 2. Projektstruktúra
 
