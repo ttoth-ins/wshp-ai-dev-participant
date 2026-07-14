@@ -34,6 +34,13 @@ export interface ConversationWithMessages extends Conversation {
 export type Row = Record<string, unknown>;
 
 /**
+ * The title a conversation is created with, before any title-generation
+ * (Linear TTO-11) has run. Exported so callers can check whether a
+ * conversation still has this placeholder rather than a real, generated one.
+ */
+export const DEFAULT_CONVERSATION_TITLE = "New Chat";
+
+/**
  * Minimal contract this module needs from a SQL client: run a parameterized
  * query, get rows back. Matches `@neondatabase/serverless`'s
  * `sql.query(text, params)`, so the real client can be passed directly.
@@ -77,7 +84,7 @@ function toMessage(row: Row): Message {
 }
 
 export async function createConversation(
-  title: string = "New Chat",
+  title: string = DEFAULT_CONVERSATION_TITLE,
   executor: QueryExecutor = getDefaultExecutor(),
 ): Promise<Conversation> {
   const rows = await executor(
@@ -115,6 +122,18 @@ export async function getConversation(
     ...toConversation(conversationRows[0]),
     messages: messageRows.map(toMessage),
   };
+}
+
+export async function updateConversationTitle(
+  id: string,
+  title: string,
+  executor: QueryExecutor = getDefaultExecutor(),
+): Promise<Conversation> {
+  const rows = await executor(
+    "UPDATE conversations SET title = $2 WHERE id = $1 RETURNING id, title, created_at",
+    [id, title],
+  );
+  return toConversation(rows[0]);
 }
 
 export async function saveMessage(

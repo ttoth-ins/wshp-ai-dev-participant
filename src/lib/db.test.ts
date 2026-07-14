@@ -5,6 +5,7 @@ import {
   getConversation,
   listConversations,
   saveMessage,
+  updateConversationTitle,
   type QueryExecutor,
   type Role,
   type Row,
@@ -60,6 +61,14 @@ function createFakeExecutor(): QueryExecutor {
     if (text.startsWith("SELECT id, title, created_at FROM conversations WHERE")) {
       return conversations.filter((c) => c.id === params[0]);
     }
+    if (text.startsWith("UPDATE conversations SET title")) {
+      const row = conversations.find((c) => c.id === params[0]);
+      if (!row) {
+        return [];
+      }
+      row.title = params[1] as string;
+      return [row];
+    }
     if (text.startsWith("SELECT id, conversation_id, role, content, created_at FROM messages")) {
       return messages
         .filter((m) => m.conversation_id === params[0])
@@ -113,6 +122,17 @@ describe("db (persistence contract, AC-04/SC-05)", () => {
     expect(loaded?.messages).toHaveLength(2);
     expect(loaded?.messages[0]).toMatchObject({ role: "user", content: "Hello" });
     expect(loaded?.messages[1]).toMatchObject({ role: "assistant", content: "Hi there" });
+  });
+
+  it("updates a conversation's title (AC-07)", async () => {
+    const executor = createFakeExecutor();
+    const conversation = await createConversation("New Chat", executor);
+
+    const updated = await updateConversationTitle(conversation.id, "Trip Planning Help", executor);
+
+    expect(updated.title).toBe("Trip Planning Help");
+    const loaded = await getConversation(conversation.id, executor);
+    expect(loaded?.title).toBe("Trip Planning Help");
   });
 
   it("returns null for a conversation id that does not exist", async () => {
