@@ -35,13 +35,19 @@ function createFakeExecutor(): QueryExecutor {
   const conversations: ConversationRow[] = [];
   const messages: MessageRow[] = [];
   let nextId = 1;
+  // Monotonic clock: real Postgres timestamps have microsecond resolution,
+  // but `new Date()` in a fast test run can produce the same millisecond
+  // for two inserts, making "order by created_at" ambiguous. An
+  // incrementing counter keeps insertion order deterministic.
+  let clock = 0;
+  const nextCreatedAt = () => new Date(clock++);
 
   return async (text, params = []): Promise<Row[]> => {
     if (text.startsWith("INSERT INTO conversations")) {
       const row: ConversationRow = {
         id: String(nextId++),
         title: params[0] as string,
-        created_at: new Date(),
+        created_at: nextCreatedAt(),
       };
       conversations.push(row);
       return [row];
@@ -65,7 +71,7 @@ function createFakeExecutor(): QueryExecutor {
         conversation_id: params[0] as string,
         role: params[1] as Role,
         content: params[2] as string,
-        created_at: new Date(),
+        created_at: nextCreatedAt(),
       };
       messages.push(row);
       return [row];
