@@ -44,6 +44,37 @@ export type ChatAction =
   | { type: "conversation-reset" }
   | { type: "conversation-loaded"; messages: ChatMessageItem[] };
 
+/**
+ * Tracks which conversation-switch fetch (if any) is still the most recent
+ * one, so `chat-view.tsx` can drop a stale result once it resolves — the
+ * same kind of staleness check `generation` above gives Send, expressed as a
+ * plain class (not a React ref) so the ordering logic itself is unit-testable
+ * without any DOM/React test infra (Linear TTO-10 review finding: New Chat vs.
+ * conversation-switch race).
+ *
+ * `next()` is called when a switch fetch starts, and returns the id to
+ * compare against later via `isStale`. `invalidate()` is called by anything
+ * that should make any in-flight switch fetch's result stale without itself
+ * starting a tracked switch — currently New Chat, mirroring how it already
+ * bumps `generation` to invalidate a stale Send.
+ */
+export class SwitchRequestGuard {
+  private currentId = 0;
+
+  next(): number {
+    this.currentId += 1;
+    return this.currentId;
+  }
+
+  invalidate(): void {
+    this.currentId += 1;
+  }
+
+  isStale(requestId: number): boolean {
+    return this.currentId !== requestId;
+  }
+}
+
 export function chatReducer(state: ChatState, action: ChatAction): ChatState {
   switch (action.type) {
     case "user-message-sent":

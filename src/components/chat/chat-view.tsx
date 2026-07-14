@@ -9,6 +9,7 @@ import type { SidebarConversation } from "@/components/sidebar/conversation-list
 import {
   chatReducer,
   initialChatState,
+  SwitchRequestGuard,
   type ChatMessageItem,
   type ChatRole,
 } from "./chat-reducer";
@@ -72,10 +73,12 @@ export function ChatView({
   // `conversation-reset`/`conversation-loaded` dispatch below.
   const generationRef = useRef(0);
   // Only the most recently requested conversation-switch may apply its
-  // result — guards against two rapid sidebar clicks resolving out of order
-  // (independent of the `generation` guard above, which instead guards
-  // against a Send/New-Chat racing a switch).
-  const latestSwitchRequestIdRef = useRef(0);
+  // result — guards against two rapid sidebar clicks resolving out of order,
+  // and (via `invalidate()` in `handleNewChat`) against New Chat completing
+  // while a switch is still in flight (Linear TTO-10 review finding). This
+  // is independent of the `generation` guard above, which instead guards
+  // against a Send racing a switch or New Chat.
+  const switchRequestGuardRef = useRef(new SwitchRequestGuard());
 
   const isSending = state.status === "sending";
   // Neither a Send nor a New Chat may start while the other is in flight —
@@ -93,8 +96,7 @@ export function ChatView({
       return;
     }
 
-    latestSwitchRequestIdRef.current += 1;
-    const requestId = latestSwitchRequestIdRef.current;
+    const requestId = switchRequestGuardRef.current.next();
 
     fetch(`/api/conversations/${id}`)
       .then((response) => {
@@ -104,8 +106,9 @@ export function ChatView({
         return response.json() as Promise<FetchedConversation>;
       })
       .then((conversation) => {
-        if (latestSwitchRequestIdRef.current !== requestId) {
-          // A newer selection superseded this one before it resolved.
+        if (switchRequestGuardRef.current.isStale(requestId)) {
+          // A newer selection, or a New Chat, superseded this one before it
+          // resolved.
           return;
         }
         conversationIdRef.current = conversation.id;
@@ -121,7 +124,7 @@ export function ChatView({
         });
       })
       .catch(() => {
-        if (latestSwitchRequestIdRef.current !== requestId) {
+        if (switchRequestGuardRef.current.isStale(requestId)) {
           return;
         }
         dispatch({
@@ -204,6 +207,11 @@ export function ChatView({
       conversationIdRef.current = conversation.id;
       setInput("");
       generationRef.current += 1;
+      // A switch fetch already in flight (user clicked a sidebar entry, then
+      // New Chat before it resolved) must not be allowed to overwrite this
+      // brand-new, empty conversation with the other one's history once it
+      // resolves (Linear TTO-10 review finding).
+      switchRequestGuardRef.current.invalidate();
       dispatch({ type: "conversation-reset" });
       onConversationCreated?.(conversation);
     } catch {

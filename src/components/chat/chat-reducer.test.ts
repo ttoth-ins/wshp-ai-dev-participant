@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   chatReducer,
   initialChatState,
+  SwitchRequestGuard,
   type ChatMessageItem,
 } from "./chat-reducer";
 
@@ -224,4 +225,46 @@ describe("chatReducer", () => {
       expect(afterStaleAi.messages).toEqual(loadedMessages);
     },
   );
+});
+
+describe("SwitchRequestGuard", () => {
+  it(
+    "marks a conversation-switch's in-flight request as stale once New Chat " +
+      "invalidates it, even though no other switch ever started (Linear " +
+      "TTO-10 review finding: New Chat vs. conversation-switch race)",
+    () => {
+      const guard = new SwitchRequestGuard();
+
+      // 1. User clicks a sidebar entry for conversation B: the switch effect
+      //    starts its fetch, tracked as request 1.
+      const switchToBRequestId = guard.next();
+      expect(guard.isStale(switchToBRequestId)).toBe(false);
+
+      // 2. Before B's fetch resolves, the user clicks New Chat, which
+      //    completes and creates conversation D — invalidating any switch
+      //    still in flight, without itself being a tracked switch request.
+      guard.invalidate();
+
+      // 3. B's GET finally resolves. Its request id must now read as stale,
+      //    so chat-view.tsx drops the result instead of overwriting D's
+      //    fresh empty state with B's history.
+      expect(guard.isStale(switchToBRequestId)).toBe(true);
+    },
+  );
+
+  it("still treats a switch request as valid when nothing has invalidated or superseded it", () => {
+    const guard = new SwitchRequestGuard();
+    const requestId = guard.next();
+
+    expect(guard.isStale(requestId)).toBe(false);
+  });
+
+  it("keeps the switch-vs-switch guard intact: only the most recently started request is valid", () => {
+    const guard = new SwitchRequestGuard();
+    const firstRequestId = guard.next();
+    const secondRequestId = guard.next();
+
+    expect(guard.isStale(firstRequestId)).toBe(true);
+    expect(guard.isStale(secondRequestId)).toBe(false);
+  });
 });
