@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { getConversation } from "@/lib/db";
 import type { QueryExecutor, Role, Row } from "@/lib/db";
 
-import { createNewConversation } from "./route";
+import { createNewConversation, listAllConversations } from "./route";
 
 /**
  * In-memory fake implementing the same `QueryExecutor` contract as the real
@@ -44,6 +44,9 @@ function createFakeExecutor(): QueryExecutor {
     if (text.startsWith("SELECT id, title, created_at FROM conversations WHERE")) {
       return conversations.filter((c) => c.id === params[0]);
     }
+    if (text.startsWith("SELECT id, title, created_at FROM conversations ORDER BY")) {
+      return [...conversations].sort((a, b) => b.created_at.getTime() - a.created_at.getTime());
+    }
     if (text.startsWith("SELECT id, conversation_id, role, content, created_at FROM messages")) {
       return messages
         .filter((m) => m.conversation_id === params[0])
@@ -73,5 +76,36 @@ describe("createNewConversation (New Chat endpoint core logic, AC-03/SC-04)", ()
 
     const loadedFirst = await getConversation(first.id, executor);
     expect(loadedFirst).toEqual({ ...first, messages: [] });
+  });
+});
+
+describe("listAllConversations (sidebar list endpoint core logic, AC-05/SC-06)", () => {
+  it("returns an empty list when no conversations exist", async () => {
+    const executor = createFakeExecutor();
+
+    const conversations = await listAllConversations({ executor });
+
+    expect(conversations).toEqual([]);
+  });
+
+  it("returns conversations most-recent-first, each with an id and a title", async () => {
+    const executor = createFakeExecutor();
+    const first = await createNewConversation({ executor });
+    const second = await createNewConversation({ executor });
+
+    const conversations = await listAllConversations({ executor });
+
+    expect(conversations.map((c) => c.id)).toEqual([second.id, first.id]);
+    expect(conversations.every((c) => typeof c.title === "string")).toBe(true);
+  });
+
+  it("does not alter any conversation while listing them", async () => {
+    const executor = createFakeExecutor();
+    const conversation = await createNewConversation({ executor });
+
+    await listAllConversations({ executor });
+
+    const loaded = await getConversation(conversation.id, executor);
+    expect(loaded).toEqual({ ...conversation, messages: [] });
   });
 });
