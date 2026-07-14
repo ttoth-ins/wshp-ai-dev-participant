@@ -1,44 +1,22 @@
-import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { createConversation as createConversationInDb } from "@/lib/db";
+import { ChatView } from "@/components/chat/chat-view";
 
-// This is your homepage. Replace it with your own idea — that is the point
-// of the day. Components come from src/components/ui (shadcn/ui: they are
-// local source files you and your AI agent can freely edit).
-
+// Chat UI (Linear TTO-7, AC-01). `createConversation` is a Server Action
+// bootstrapping this chat's own conversation on first send, lazily — it is
+// intentionally NOT the reusable `POST /api/conversations` endpoint (that
+// stays TTO-8's scope, with its own contract/tests). Keeping it as an inline
+// action here (rather than a route) also means it only runs when a message
+// is actually sent, not during build or on every page load.
 export default function Home() {
+  async function createConversation(): Promise<string> {
+    "use server";
+    const conversation = await createConversationInDb();
+    return conversation.id;
+  }
+
   return (
-    <main className="flex flex-1 flex-col items-center justify-center gap-6 p-8">
-      <Card className="w-full max-w-md">
-        <CardHeader>
-          <CardTitle>It works!</CardTitle>
-          <CardDescription>
-            Next.js + Tailwind + shadcn/ui starter — your website begins here.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4">
-          <p className="text-sm text-muted-foreground">
-            Edit <code>src/app/page.tsx</code> and this page updates live.
-          </p>
-          <Button
-            className="w-fit"
-            render={
-              <a
-                href="https://ui.shadcn.com/docs/components"
-                target="_blank"
-                rel="noreferrer"
-              />
-            }
-          >
-            Browse components
-          </Button>
-        </CardContent>
-      </Card>
+    <main className="flex flex-1 flex-col items-center p-4">
+      <ChatView createConversation={createConversation} />
     </main>
   );
 }
