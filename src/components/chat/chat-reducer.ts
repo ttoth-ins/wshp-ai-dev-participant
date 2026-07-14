@@ -32,7 +32,8 @@ export const initialChatState: ChatState = {
 export type ChatAction =
   | { type: "user-message-sent"; message: ChatMessageItem }
   | { type: "ai-response-received"; message: ChatMessageItem }
-  | { type: "send-failed"; error: string };
+  | { type: "send-failed"; error: string }
+  | { type: "conversation-reset" };
 
 export function chatReducer(state: ChatState, action: ChatAction): ChatState {
   switch (action.type) {
@@ -58,6 +59,12 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         status: "error",
         error: action.error,
       };
+    case "conversation-reset":
+      // New Chat (Linear TTO-8, AC-03/SC-04): switches this view to a new,
+      // empty, active conversation. This only resets client-side view
+      // state — the previous conversation's rows are untouched in the
+      // database (see `src/app/api/conversations/route.ts`).
+      return initialChatState;
     default:
       return state;
   }

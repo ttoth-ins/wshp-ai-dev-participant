@@ -12,13 +12,15 @@ import {
 } from "./chat-reducer";
 
 /**
- * Chat view: message list, text input, Send button, loading state
- * (Linear TTO-7, AC-01 / SC-01).
+ * Chat view: message list, text input, Send button, New Chat button, loading
+ * state (Linear TTO-7 AC-01/SC-01; Linear TTO-8 AC-03/SC-04).
  *
  * `createConversation` bootstraps the conversation this chat is sent
- * against, lazily, on the first message the user actually sends — see the
- * TTO-7 handoff for why this isn't the reusable `POST /api/conversations`
- * endpoint (that's TTO-8's scope).
+ * against, lazily, on the first message the user actually sends (unchanged
+ * from TTO-7). The **New Chat** button instead calls the reusable
+ * `POST /api/conversations` endpoint (TTO-8) eagerly and immediately resets
+ * this view to a new, empty, active conversation — it does not read or
+ * modify any previous conversation's data.
  */
 export interface ChatViewProps {
   createConversation: () => Promise<string>;
@@ -87,8 +89,39 @@ export function ChatView({ createConversation }: ChatViewProps) {
     }
   }
 
+  async function handleNewChat() {
+    if (isSending) {
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/conversations", { method: "POST" });
+      if (!response.ok) {
+        throw new Error("Failed to create a new conversation");
+      }
+
+      const conversation = (await response.json()) as { id: string };
+      conversationIdRef.current = conversation.id;
+      setInput("");
+      dispatch({ type: "conversation-reset" });
+    } catch {
+      // The failed New Chat attempt leaves the current conversation and its
+      // messages exactly as they were (SC-04) — only an error is shown.
+      dispatch({
+        type: "send-failed",
+        error: "Could not start a new chat. Please try again.",
+      });
+    }
+  }
+
   return (
     <div className="flex w-full max-w-2xl flex-1 flex-col gap-4 p-4">
+      <div className="flex justify-end">
+        <Button type="button" variant="outline" size="sm" onClick={handleNewChat}>
+          New Chat
+        </Button>
+      </div>
+
       <div className="flex flex-1 flex-col gap-3 overflow-y-auto rounded-lg border border-border p-4">
         {state.messages.length === 0 && (
           <p className="text-sm text-muted-foreground">

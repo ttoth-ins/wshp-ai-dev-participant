@@ -83,4 +83,19 @@ describe("chatReducer", () => {
     expect(afterFailure.status).toBe("error");
     expect(afterFailure.error).toBe("Failed to get a response from Claude");
   });
+
+  it("New Chat resets to a fresh, empty, idle state (AC-03/SC-04)", () => {
+    const afterUser = chatReducer(initialChatState, {
+      type: "user-message-sent",
+      message: userMessage,
+    });
+    const afterAi = chatReducer(afterUser, {
+      type: "ai-response-received",
+      message: aiMessage,
+    });
+
+    const afterReset = chatReducer(afterAi, { type: "conversation-reset" });
+
+    expect(afterReset).toEqual(initialChatState);
+  });
 });
