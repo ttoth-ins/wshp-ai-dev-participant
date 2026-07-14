@@ -1,6 +1,12 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 
-import { getConversation, saveMessage, updateConversationTitle, type QueryExecutor } from "@/lib/db";
+import {
+  getConversation,
+  saveMessage,
+  updateConversationTitle,
+  DEFAULT_CONVERSATION_TITLE,
+  type QueryExecutor,
+} from "@/lib/db";
 import { getChatResponse, type ChatMessage, type ClaudeSend } from "@/lib/claude";
 import { generateTitle } from "@/lib/title";
 
@@ -13,10 +19,22 @@ import { generateTitle } from "@/lib/title";
  * On a Claude-call failure (SC-03): the user's message stays saved, no
  * assistant message is written, and the client gets a clear error response.
  *
- * If this was the conversation's first message, a title-generation call is
- * kicked off separately, without being awaited: it must not delay the chat
- * response (SC-08A), and if it fails, the failure is swallowed here rather
- * than propagated — the conversation just keeps showing "New Chat" (SC-08B).
+ * Title generation is attempted whenever the conversation still has its
+ * default title (rather than "was this the first message ever", which a
+ * failed first chat call would poison permanently — a retry's history
+ * already has length >= 2, so counting messages can never re-trigger it).
+ * Checking the title itself is retry-safe: it only flips away from the
+ * default once a title has actually been generated and saved, so the very
+ * first *successful* chat call for a conversation is always the one that
+ * triggers it, however many earlier attempts failed.
+ *
+ * The title-generation call itself must not delay the chat response
+ * (SC-08A), and if it fails, the failure is swallowed rather than
+ * propagated — the conversation just keeps showing "New Chat" (SC-08B). It's
+ * registered through Next's `after()` (which uses Vercel's `waitUntil` under
+ * the hood) rather than left as a bare unawaited promise, so it isn't at risk
+ * of being silently abandoned once the response is sent on a serverless
+ * Function.
  */
 
 export interface SendMessageDeps {
@@ -46,18 +64,20 @@ export async function sendMessage(
     role: message.role,
     content: message.content,
   }));
-  const isFirstMessage = history.length === 1;
+  const hasDefaultTitle = conversation?.title === DEFAULT_CONVERSATION_TITLE;
 
   const reply = await getChatResponse(history, deps.send);
 
   await saveMessage(conversationId, "assistant", reply, deps.executor);
 
-  if (isFirstMessage) {
-    void generateTitle(content, deps.titleSend)
-      .then((title) => updateConversationTitle(conversationId, title, deps.executor))
-      .catch((error) => {
-        console.error("Failed to generate conversation title", error);
-      });
+  if (hasDefaultTitle) {
+    after(() =>
+      generateTitle(content, deps.titleSend)
+        .then((title) => updateConversationTitle(conversationId, title, deps.executor))
+        .catch((error) => {
+          console.error("Failed to generate conversation title", error);
+        }),
+    );
   }
 
   return { reply };
