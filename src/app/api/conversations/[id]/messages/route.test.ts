@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { createConversation, getConversation, saveMessage } from "@/lib/db";
 import type { QueryExecutor, Role, Row } from "@/lib/db";
@@ -44,6 +44,14 @@ function createFakeExecutor(): QueryExecutor {
     }
     if (text.startsWith("SELECT id, title, created_at FROM conversations WHERE")) {
       return conversations.filter((c) => c.id === params[0]);
+    }
+    if (text.startsWith("UPDATE conversations SET title")) {
+      const row = conversations.find((c) => c.id === params[0]);
+      if (!row) {
+        return [];
+      }
+      row.title = params[1] as string;
+      return [row];
     }
     if (text.startsWith("SELECT id, conversation_id, role, content, created_at FROM messages")) {
       return messages
@@ -129,5 +137,80 @@ describe("sendMessage (chat endpoint core logic, AC-02)", () => {
     const loaded = await getConversation(conversation.id, executor);
     expect(loaded?.messages).toHaveLength(1);
     expect(loaded?.messages[0]).toMatchObject({ role: "user", content: "Hello" });
+  });
+
+  it("generates and saves a title after the conversation's first message (AC-07, SC-08A)", async () => {
+    const executor = createFakeExecutor();
+    const conversation = await createConversation("New Chat", executor);
+
+    let titlePromptContent: string | undefined;
+    const fakeTitleSend: ClaudeSend = async (messages) => {
+      titlePromptContent = messages[0]?.content;
+      return "Trip Planning Help";
+    };
+    const fakeSend: ClaudeSend = async () => "Sure, I can help with that.";
+
+    await sendMessage(conversation.id, "Help me plan a trip to Japan", {
+      executor,
+      send: fakeSend,
+      titleSend: fakeTitleSend,
+    });
+
+    await vi.waitFor(async () => {
+      const loaded = await getConversation(conversation.id, executor);
+      expect(loaded?.title).toBe("Trip Planning Help");
+    });
+
+    expect(titlePromptContent).toContain("Help me plan a trip to Japan");
+  });
+
+  it("does not trigger title generation for a non-first message (AC-07 boundary)", async () => {
+    const executor = createFakeExecutor();
+    const conversation = await createConversation("New Chat", executor);
+    await saveMessage(conversation.id, "user", "first message", executor);
+    await saveMessage(conversation.id, "assistant", "first reply", executor);
+
+    let titleSendCalled = false;
+    const fakeTitleSend: ClaudeSend = async () => {
+      titleSendCalled = true;
+      return "Should not be used";
+    };
+    const fakeSend: ClaudeSend = async () => "second reply";
+
+    await sendMessage(conversation.id, "second message", {
+      executor,
+      send: fakeSend,
+      titleSend: fakeTitleSend,
+    });
+
+    expect(titleSendCalled).toBe(false);
+    const loaded = await getConversation(conversation.id, executor);
+    expect(loaded?.title).toBe("New Chat");
+  });
+
+  it("does not fail the chat response or corrupt messages when title generation fails (SC-08B)", async () => {
+    const executor = createFakeExecutor();
+    const conversation = await createConversation("New Chat", executor);
+
+    const fakeSend: ClaudeSend = async () => "Hi there!";
+    const failingTitleSend: ClaudeSend = async () => {
+      throw new Error("title generation API down");
+    };
+
+    const result = await sendMessage(conversation.id, "Hello", {
+      executor,
+      send: fakeSend,
+      titleSend: failingTitleSend,
+    });
+
+    expect(result.reply).toBe("Hi there!");
+
+    const loaded = await getConversation(conversation.id, executor);
+    expect(loaded?.title).toBe("New Chat");
+    expect(loaded?.messages).toHaveLength(2);
+    expect(loaded?.messages.map((m) => ({ role: m.role, content: m.content }))).toEqual([
+      { role: "user", content: "Hello" },
+      { role: "assistant", content: "Hi there!" },
+    ]);
   });
 });

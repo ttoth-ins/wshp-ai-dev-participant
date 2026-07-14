@@ -117,6 +117,18 @@ export async function getConversation(
   };
 }
 
+export async function updateConversationTitle(
+  id: string,
+  title: string,
+  executor: QueryExecutor = getDefaultExecutor(),
+): Promise<Conversation> {
+  const rows = await executor(
+    "UPDATE conversations SET title = $2 WHERE id = $1 RETURNING id, title, created_at",
+    [id, title],
+  );
+  return toConversation(rows[0]);
+}
+
 export async function saveMessage(
   conversationId: string,
   role: Role,
