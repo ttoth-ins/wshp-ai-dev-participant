@@ -30,8 +30,9 @@ owned. A feature cannot silently override it.
 ## Non-negotiable boundaries
 
 - Allowed modules/data: `src/app/**`, `src/components/ui/**` (csak a shadcn
-  CLI-n keresztül bővítve), `src/lib/**`, `docs/**`; a leendő perzisztencia-
-  réteg futásidejű adatfájlja gitignore-olva (lásd Linear TTO-5).
+  CLI-n keresztül bővítve), `src/lib/**`, `docs/**`; a perzisztencia-réteg
+  **Neon Postgres** (Vercel Marketplace-integráció, `DATABASE_URL` env
+  változón át — lásd Linear TTO-5, D-01 felülvizsgálva).
 - Forbidden modules/data: `src/components/ui/**` kézi, CLI-n kívüli átírása;
   új npm-függőség bevezetése ok nélkül; a közös workshop-forrásrepo
   (`C:\work\ai-ws`) és a benne lévő `reference-app` szerkesztése — azok csak
@@ -42,13 +43,14 @@ owned. A feature cannot silently override it.
   TTO-5…TTO-11 issue-k rögzítik feature-önként, ahogy elkészülnek.
 - Authorization and privacy invariants: nincs autentikáció (szándékos
   non-goal); nincs valós személyes adat — csak a beszélgetés szövege, amit a
-  résztvevő maga visz be; titkos kulcs (`ANTHROPIC_API_KEY`) kizárólag
-  `.env.local`-ban, sosem commitolva.
+  résztvevő maga visz be; titkos kulcsok (`ANTHROPIC_API_KEY`, `DATABASE_URL`)
+  kizárólag `.env.local`-ban / Vercel env-ben, sosem commitolva.
 - Public-repository hygiene: a repo **PUBLIC** (`ttoth-ins/wshp-ai-dev-participant`
   — 2026-07-14-től, hogy a branch protection beköthető legyen, lásd D-04 a
   `tasks.md`-ben) — nincs secret, valós ügyfélnév vagy valós személyes adat a
   git historyban (`.env*` gitignore-olva, `.env.example` üres váz). Mivel a
-  repo ténylegesen nyilvános, ez most terhelő kötelezettség, nem elővigyázatosság.
+  repo ténylegesen nyilvános, ez most terhelő kötelezettség, nem elővigyázatosság
+  — a `DATABASE_URL` connection string ugyanúgy titok, mint az `ANTHROPIC_API_KEY`.
 - Supported compatibility/locale/time assumptions: modern evergreen böngésző
   (Chrome/Edge/Firefox aktuális verzió); UI nyelve magyar/angol vegyíthető, kód
   és commit angol (lásd `AGENTS.md`); tárolt időbélyegek ISO 8601, UTC.
@@ -85,11 +87,12 @@ owned. A feature cannot silently override it.
 
 ## Change control
 
-- Constitution version: v1.0 (jóváhagyott — a korábbi v0.1 draftot váltja)
+- Constitution version: v1.1 (jóváhagyott módosítás — felülvizsgálja D-01-et:
+  perzisztencia SQLite → Neon Postgres)
 - Approved by: Tóth Tibor
 - Approved at: 2026-07-14 (pontos időpont nem rögzítve)
 - Next review: az implementáció megkezdése előtt (Linear TTO-5, C4 maker-blokk)
-- Supersedes: v0.1 (draft)
+- Supersedes: v1.0 (approved)
 
 A feature that conflicts with this constitution is `BLOCKED` until a human owner
 changes the constitution or the feature. The implementation agent must not

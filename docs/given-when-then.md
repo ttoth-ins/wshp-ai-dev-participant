@@ -5,8 +5,9 @@
 > `docs/constitution.md` → Canonical standards and real gates. They are not
 > manual command-entry instructions for a human.
 
-`STATUS: DRAFT — derived from docs/constitution.md and docs/spec.md, awaiting
-human approval alongside the constitution`
+`STATUS: APPROVED — derived from docs/constitution.md and docs/spec.md
+(both APPROVED, Tóth Tibor, 2026-07-14); SC-05 updated 2026-07-14 to reflect
+the D-01 amendment (persistence: SQLite → Neon Postgres, constitution v1.1)`
 
 Business intent is written in Hungarian first (with the spec author), then
 recorded as an executable, English contract — per
@@ -65,9 +66,10 @@ azonnal aktívvá válik, a korábbiak változatlanul megmaradnak.
 **Magyar szándék:** minden felhasználói üzenet és AI válasz mentésre kerül, és
 az alkalmazás újraindítása után is elérhető.
 
-**Given** a conversation with at least one user message and one AI response<br>
-**When** the application is restarted (server process restarts, storage file
-is untouched)<br>
+**Given** a conversation with at least one user message and one AI response,
+persisted in Neon Postgres<br>
+**When** the application is restarted (server process restarts; the Postgres
+database itself is untouched)<br>
 **Then** the conversation and all its messages are still retrievable, in the
 same order, with the same content
 
@@ -125,17 +127,17 @@ erroring out or showing a broken title
 | SC-02 | §2 | unit/contract — chat endpoint (TTO-6) | `npm run test -- messages` | N=0 vs. N>0 prior messages | n/a |
 | SC-03 | §2 | unit — chat endpoint, mocked Claude client failure (TTO-6) | `npm run test -- messages` | Claude API timeout / 5xx | saved user message untouched, no AI row written |
 | SC-04 | §3 | unit/contract — conversations endpoint (TTO-8) | `npm run test -- conversations` | 0 vs. N existing conversations | prior conversations byte-for-byte unchanged |
-| SC-05 | §4 | contract — DB module (TTO-5) | `npm run test -- db` | process restart (re-open same DB file) | none — this IS the assertion |
+| SC-05 | §4 | contract — DB module (TTO-5) | `npm run test -- db` | process restart (same Neon database, reconnect) | none — this IS the assertion |
 | SC-06 | §5 | component/unit — sidebar (TTO-9) | `npm run test -- sidebar` | 0 vs. N conversations | n/a |
 | SC-07 | §6 | unit/contract — conversation-by-id endpoint (TTO-10) | `npm run test -- conversations` | M=1 vs. M>1 messages | n/a |
 | SC-08A | §7 | unit — title generation (TTO-11) | `npm run test -- title` | first message only | n/a |
 | SC-08B | §7 | unit — title generation, mocked failure (TTO-11) | `npm run test -- title` | title-gen call throws/times out | title stays `New Chat`, message flow (SC-01/SC-02) unaffected |
 
-- Required fake/real adapter contract: once TTO-5 lands, the SQLite-backed
+- Required fake/real adapter contract: once TTO-5 lands, the Neon-backed
   conversation/message store needs a contract test that would pass against an
-  in-memory fake too, so persistence logic isn't only exercised through the
-  real file — see `docs/engineering-standard.md` §4 (module-level
-  auto-testability).
+  in-memory fake too, so persistence logic isn't only exercised through a real
+  network connection to Postgres — see `docs/engineering-standard.md` §4
+  (module-level auto-testability).
 - Browser-automated observation: `npm run test:e2e` (Playwright, headless
   Chromium), wired into CI — see `docs/constitution.md`. Currently only a
   harness smoke test exists (`e2e/smoke.spec.ts`); SC-01/04/06/07/08 get their
